@@ -1,0 +1,929 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Bücher erfassen und analysieren</h1>
+    
+    <!-- Upload Formular -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Neues Buch hinzufügen</h5>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="form-group mb-3">
+                    <label for="images">Bilder auswählen (Cover, Rückseite, Details mit Maßband/Zollstock)</label>
+                    <input type="file" class="form-control-file" id="images" name="images" multiple accept="image/*" required
+                           onchange="validateFiles(this)">
+                    <div class="alert alert-info mt-2">
+                        <i class="fas fa-ruler"></i> <strong>Wichtig für Maßerkennung:</strong>
+                        <ul class="mb-0">
+                            <li>Ein Foto mit deutlich sichtbarem Maßband/Zollstock neben dem Buch aufnehmen</li>
+                            <li>Maßband/Zollstock parallel zur Buchkante ausrichten</li>
+                            <li>Gute Beleuchtung und scharfes Foto für beste Ergebnisse</li>
+                            <li>Maßband/Zollstock muss Millimeter- oder Zentimetermarkierungen zeigen</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="weight">Gewicht (in Gramm)</label>
+                    <input type="number" class="form-control" id="weight" name="weight" required min="0" step="1" placeholder="z.B. 500">
+                    <small class="form-text text-muted">Bitte das Gewicht des Buches in Gramm angeben.</small>
+                </div>
+                <button type="submit" class="btn btn-primary mt-2" id="submitButton">Analysieren und hochladen</button>
+            </form>
+            <div id="uploadProgress" class="progress mt-2 d-none">
+                <div class="progress-bar" role="progressbar" style="width: 0%">
+                    <span class="progress-text">Upload läuft...</span>
+                </div>
+            </div>
+            <div id="validationFeedback" class="mt-2"></div>
+        </div>
+    </div>
+
+    <!-- Bücherliste -->
+    <div class="row" id="bookList">
+        {% for book in books %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                {% if book.image_urls and book.image_urls[0] %}
+                <img src="{{ book.image_urls[0] }}" class="card-img-top" alt="{{ book.title }}" style="height: 200px; object-fit: contain;">
+                {% endif %}
+                <div class="card-body">
+                    <h5 class="card-title">{{ book.title or 'Unbekannter Titel' }}</h5>
+                    
+                    <!-- Buchdetails -->
+                    <!-- Preis- und Versandinfo Box -->
+                    <div class="alert price-shipping-info mb-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="mb-2"><i class="fas fa-euro-sign"></i> Preis & Versand</h6>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="fas fa-book text-primary"></i> Buchpreis:</span>
+                                    <strong>{{ "%.2f"|format(book.price or 0) }} €</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="fas fa-shipping-fast text-primary"></i> Versandkosten:</span>
+                                    <strong>{{ "%.2f"|format(book.to_dict().shipping_cost) }} €</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-1">
+                                    <span class="fw-bold">Gesamtpreis:</span>
+                                    <strong class="total-price">{{ "%.2f"|format(book.to_dict().total_price) }} €</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="mb-2"><i class="fas fa-cube"></i> Spezifikationen</h6>
+                                <div class="specs-box small">
+                                    <div class="mb-2">
+                                        <i class="fas fa-weight-hanging text-primary"></i>
+                                        <strong>Gewicht:</strong> {{ book.weight or 0 }}g
+                                    </div>
+                                    <div>
+                                        <i class="fas fa-ruler-combined text-primary"></i>
+                                        <strong>Maße:</strong>
+                                        {% if book.dimensions %}
+                                        <div class="ms-3 mt-1">
+                                            <i class="fas fa-arrows-alt-h"></i> Länge: {{ book.dimensions.length }}cm<br>
+                                            <i class="fas fa-arrows-alt-h"></i> Breite: {{ book.dimensions.width }}cm<br>
+                                            <i class="fas fa-arrows-alt-v"></i> Höhe: {{ book.dimensions.height }}cm
+                                        </div>
+                                        {% else %}
+                                            <span class="text-muted ms-2">Keine Angabe</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grundinformationen -->
+                    <div class="mb-3">
+                        <h6>Grundinformationen:</h6>
+                        <strong>Autor:</strong> {{ book.author or 'Unbekannt' }}<br>
+                        <strong>ISBN:</strong> {{ book.isbn or 'Nicht verfügbar' }}<br>
+                        <strong>Verlag:</strong> {{ book.publisher or 'Unbekannt' }}<br>
+                        <strong>Jahr:</strong> {{ book.publication_year or 'Unbekannt' }}<br>
+                        <strong>Auflage:</strong> {{ book.edition or 'Nicht angegeben' }}<br>
+                        <strong>Format:</strong> {{ book.format or 'Nicht angegeben' }}<br>
+                        <strong>Sprache:</strong> {{ book.language or 'Nicht angegeben' }}<br>
+                        <strong>Genre:</strong> {{ book.genre or 'Nicht kategorisiert' }}<br>
+                    </div>
+
+                    <!-- Aktionen -->
+                    <div class="btn-group">
+                        <button class="btn btn-info btn-sm" onclick="showDetails('{{ book.id }}')">Details</button>
+                        <button class="btn btn-primary btn-sm" onclick="editBook('{{ book.id }}')">Bearbeiten</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteBook('{{ book.id }}')">Löschen</button>
+                        <button class="btn btn-success btn-sm" onclick="uploadToBooklooker('{{ book.id }}')" id="booklookerBtn_{{ book.id }}">
+                            Zu Booklooker
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="checkBooklookerStatus('{{ book.id }}')" id="booklookerStatusBtn_{{ book.id }}">
+                            Status prüfen
+                        </button>
+                    </div>
+                    <div id="booklookerStatus_{{ book.id }}" class="mt-2 small" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Lädt...</span>
+                            </div>
+                            <span class="ms-2" id="booklookerStatusText_{{ book.id }}">Upload läuft...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detailsModalLabel">Buchdetails</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="detailsContent">
+                <!-- Wird dynamisch gefüllt -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">Buch bearbeiten</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm">
+                    <input type="hidden" id="editBookId">
+                    
+                    <!-- Grundinformationen -->
+                    <div class="mb-3">
+                        <label class="form-label">Titel</label>
+                        <input type="text" class="form-control" id="editTitle">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Originaltitel</label>
+                        <input type="text" class="form-control" id="editOriginalTitle">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Autor</label>
+                        <input type="text" class="form-control" id="editAuthor">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ISBN</label>
+                        <input type="text" class="form-control" id="editIsbn">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Verlag</label>
+                        <input type="text" class="form-control" id="editPublisher">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Erscheinungsjahr</label>
+                        <input type="number" class="form-control" id="editYear">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Auflage</label>
+                        <input type="text" class="form-control" id="editEdition">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Format</label>
+                        <input type="text" class="form-control" id="editFormat">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Seitenanzahl</label>
+                        <input type="number" class="form-control" id="editPages">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Sprache</label>
+                        <input type="text" class="form-control" id="editLanguage">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Genre</label>
+                        <input type="text" class="form-control" id="editGenre">
+                    </div>
+                    
+                    <!-- Zustand und Preis -->
+                    <div class="mb-3">
+                        <label class="form-label">Zustand</label>
+                        <select class="form-control" id="editCondition">
+                            <option value="New">Neu</option>
+                            <option value="Like New">Wie neu</option>
+                            <option value="Very Good">Sehr gut</option>
+                            <option value="Good">Gut</option>
+                            <option value="Fair">Akzeptabel</option>
+                            <option value="Poor">Schlecht</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Preis (€)</label>
+                        <input type="number" step="0.01" class="form-control" id="editPrice">
+                    </div>
+                    
+                    <!-- Beschreibung -->
+                    <div class="mb-3">
+                        <label class="form-label">Beschreibung</label>
+                        <textarea class="form-control" id="editDescription" rows="3"></textarea>
+                    </div>
+                    
+                    <!-- Zusatzinformationen -->
+                    <div class="mb-3">
+                        <label class="form-label">Inhaltszusammenfassung</label>
+                        <textarea class="form-control" id="editSummary" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" onclick="saveEdit()">Speichern</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Modal-Instanzen
+let detailsModal;
+let editModal;
+
+// Konstanten
+const GEMINI_MAX_SIZE = 20971520; // 20MB Gemini Limit
+
+// Initialisierung beim Laden der Seite
+document.addEventListener('DOMContentLoaded', function() {
+    detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    editModal = new bootstrap.Modal(document.getElementById('editModal'));
+    document.getElementById('uploadForm').addEventListener('submit', handleUpload);
+});
+
+function showDetails(bookId) {
+    fetch(`/books/${bookId}`)
+        .then(response => response.json())
+        .then(data => {
+            let content = `
+                <div class="container">
+                    <h4>${data.title || 'Unbekannter Titel'}</h4>
+                    <div class="row">
+                        <!-- Grundinformationen -->
+                        <div class="col-md-6">
+                            <h5>Grundinformationen</h5>
+                            <ul class="list-unstyled">
+                                <li><strong>Autor:</strong> ${data.author || 'Unbekannt'}</li>
+                                <li><strong>Originaltitel:</strong> ${data.image_analysis_results?.metadata?.originaltitel || 'Nicht verfügbar'}</li>
+                                <li><strong>ISBN:</strong> ${data.isbn || 'Nicht verfügbar'}</li>
+                                <li><strong>Verlag:</strong> ${data.publisher || 'Unbekannt'}</li>
+                                <li><strong>Jahr:</strong> ${data.publication_year || 'Unbekannt'}</li>
+                                <li><strong>Auflage:</strong> ${data.edition || 'Nicht angegeben'}</li>
+                                <li><strong>Format:</strong> ${data.format || 'Nicht angegeben'}</li>
+                                <li><strong>Seitenanzahl:</strong> ${data.page_count || 'Nicht angegeben'}</li>
+                                <li><strong>Sprache:</strong> ${data.language || 'Nicht angegeben'}</li>
+                                <li><strong>Genre:</strong> ${data.genre || 'Nicht kategorisiert'}</li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Zustandsanalyse -->
+                        <div class="col-md-6">
+                            <h5>Zustandsanalyse</h5>
+                            <ul class="list-unstyled">
+                                <li><strong>Aktueller Zustand:</strong> ${data.condition || 'Nicht verfügbar'}</li>
+                                <li class="mt-2"><strong>KI-Analyse:</strong></li>
+                                <ul class="list-unstyled ps-3">
+                                    ${data.image_analysis_results?.condition_analysis?.zustand_beschreibung ? `
+                                    <li><small>${data.image_analysis_results.condition_analysis.zustand_beschreibung}</small></li>` : ''}
+                                    ${data.image_analysis_results?.condition_analysis?.maengel_besonderheiten ? `
+                                    <li class="mt-2">
+                                        <strong>Details:</strong><br>
+                                        <small>${data.image_analysis_results.condition_analysis.maengel_besonderheiten}</small>
+                                    </li>` : ''}
+                                    <li><strong>Einschätzung:</strong> ${data.image_analysis_results?.condition_analysis?.zustand_einschätzung || 'Nicht verfügbar'}</li>
+                                    <li><strong>Konfidenz:</strong> ${Math.round((data.image_analysis_results?.condition_analysis?.confidence_score || 0) * 100)}%</li>
+                                </ul>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Preis- und Marktanalyse -->
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h5>Preisanalyse</h5>
+                            <ul class="list-unstyled">
+                                ${data.image_analysis_results?.market_data ? `
+                                <!-- Statistik Übersicht -->
+                                <li class="mb-3">
+                                    <div class="stats-overview">
+                                        <div class="row g-2">
+                                            <div class="col-6 col-md-3">
+                                                <div class="stats-item">
+                                                    <div class="stats-value">${data.price ? data.price.toFixed(2) + ' €' : '-'}</div>
+                                                    <div class="stats-label">Aktueller Preis</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <div class="stats-item">
+                                                    <div class="stats-value">${data.image_analysis_results.market_data.vergleichsangebote?.statistik?.durchschnittspreis?.aktuelle_auflage || '-'}</div>
+                                                    <div class="stats-label">Ø Marktpreis</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <div class="stats-item">
+                                                    <div class="stats-value">${data.image_analysis_results.market_data.vergleichsangebote?.statistik?.angebotsmenge?.aktuelle_auflage || '0'}</div>
+                                                    <div class="stats-label">Aktuelle Angebote</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <div class="stats-item">
+                                                    <div class="stats-value">
+                                                        <i class="fas ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100) > 70 ? 'fa-check-circle text-success' : 'fa-info-circle text-warning'}"></i>
+                                                        ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100)}%
+                                                    </div>
+                                                    <div class="stats-label">Konfidenz</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                                
+                                <li><strong>Preisempfehlung:</strong></li>
+                                <ul class="list-unstyled ps-3">
+                                    <li>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong>Optimaler Verkaufspreis:</strong>
+                                            <span class="badge bg-success">${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufspreis.optimal || 'Nicht verfügbar'}</span>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <strong>Schnellverkaufspreis:</strong>
+                                            <span class="badge bg-warning text-dark">${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufspreis.schnellverkauf || 'Nicht verfügbar'}</span>
+                                        </div>
+                                    </li>
+                                    
+                                    <li class="mt-3">
+                                        <div class="card border-info">
+                                            <div class="card-header bg-light">
+                                                <strong>Preisempfehlung basiert auf:</strong>
+                                                <div class="progress mt-2" style="height: 5px;">
+                                                    <div class="progress-bar bg-info" role="progressbar"
+                                                         style="width: ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100)}%">
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted">Konfidenz: ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100)}%</small>
+                                            </div>
+                                            <div class="card-body">
+                                                <h6 class="card-subtitle mb-2 text-muted">Hauptfaktoren:</h6>
+                                                <ul class="list-unstyled">
+                                                    ${data.image_analysis_results.market_data.preisanalyse.empfehlung.begruendung?.hauptfaktoren?.map(faktor =>
+                                                        `<li><small>• ${faktor}</small></li>`
+                                                    ).join('') || '<li><small class="text-muted">Keine Faktoren verfügbar</small></li>'}
+                                                </ul>
+                                                
+                                                <h6 class="card-subtitle mb-2 mt-3 text-muted">Referenzangebote:</h6>
+                                                <ul class="list-unstyled">
+                                                    ${data.image_analysis_results.market_data.preisanalyse.empfehlung.begruendung?.referenzangebote?.map(ref =>
+                                                        `<li><small>• ${ref}</small></li>`
+                                                    ).join('') || '<li><small class="text-muted">Keine Referenzangebote verfügbar</small></li>'}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </li>
+                                    
+                                    <li class="mt-2"><strong>Verkaufsstrategie:</strong></li>
+                                    <ul class="list-unstyled ps-3">
+                                        <li><small><strong>Booklooker:</strong> ${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufsstrategie.plattform_empfehlungen.booklooker || ''}</small></li>
+                                        <li><small><strong>eBay:</strong> ${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufsstrategie.plattform_empfehlungen.ebay || ''}</small></li>
+                                        <li class="mt-1"><small><strong>Optimale Laufzeit:</strong> ${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufsstrategie.optimale_laufzeit || ''}</small></li>
+                                        <li><small><strong>Saisonale Aspekte:</strong> ${data.image_analysis_results.market_data.preisanalyse.empfehlung.verkaufsstrategie.saisonale_aspekte || ''}</small></li>
+                                    </ul>
+                                </ul>
+<li class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <strong>Vergleichbare Angebote</strong>
+            <div>
+                <span class="badge bg-light text-dark">
+                    Gesamt: ${data.image_analysis_results.market_data.vergleichsangebote?.statistik?.angebotsmenge?.aktuelle_auflage || 0} Angebote
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <!-- Aktuelle Auflage -->
+            ${data.image_analysis_results.market_data.vergleichsangebote?.aktuelle_auflage?.length ? `
+            <div class="p-3 border-bottom">
+                <h6 class="mb-3">Gleiche Auflage</h6>
+                <div class="row">
+                    ${data.image_analysis_results.market_data.vergleichsangebote.aktuelle_auflage.map(angebot => `
+                    <div class="col-md-6 mb-2">
+                        <div class="card h-100 border-light">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <span class="badge bg-primary">${angebot.preis}</span>
+                                    <span class="badge ${angebot.zustand === 'Sehr Gut' ? 'bg-success' :
+                                                      angebot.zustand === 'Gut' ? 'bg-warning text-dark' :
+                                                      'bg-secondary'}">${angebot.zustand}</span>
+                                </div>
+                                <p class="small mt-2 mb-1">${angebot.details}</p>
+                                <div class="mt-2">
+                                    <a href="${angebot.link || '#'}" target="_blank" class="btn btn-sm btn-outline-primary ${angebot.link ? '' : 'disabled'}">
+                                        ${angebot.anbieter}
+                                        <i class="fas fa-external-link-alt ms-1"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- Andere Auflagen -->
+            ${data.image_analysis_results.market_data.vergleichsangebote?.andere_auflagen?.length ? `
+            <div class="p-3 bg-light">
+                <h6 class="mb-3">Andere Auflagen</h6>
+                <div class="row">
+                    ${data.image_analysis_results.market_data.vergleichsangebote.andere_auflagen.map(angebot => `
+                    <div class="col-md-6 mb-2">
+                        <div class="card h-100">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <span class="badge bg-primary">${angebot.preis}</span>
+                                    <small class="text-muted">${angebot.auflage}</small>
+                                </div>
+                                <p class="small mt-2 mb-1">
+                                    <span class="badge ${angebot.zustand === 'Sehr Gut' ? 'bg-success' :
+                                                       angebot.zustand === 'Gut' ? 'bg-warning text-dark' :
+                                                       'bg-secondary'}">${angebot.zustand}</span>
+                                    ${angebot.details}
+                                </p>
+                                <small class="text-muted">${angebot.preisdifferenz_begruendung || ''}</small>
+                                <div class="mt-2">
+                                    <a href="${angebot.link || '#'}" target="_blank" class="btn btn-sm btn-outline-secondary ${angebot.link ? '' : 'disabled'}">
+                                        ${angebot.anbieter}
+                                        <i class="fas fa-external-link-alt ms-1"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    </div>
+</li>
+                                </ul>
+
+                                <li class="mt-3">
+                                    <div class="card border-info">
+                                        <div class="card-header">
+                                            <strong>Preise nach Zustand</strong>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="table-responsive">
+                                                <table class="table table-hover table-sm mb-0">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th style="width: 20%">Zustand</th>
+                                                            <th style="width: 20%">Preis</th>
+                                                            <th>Details & Vergleiche</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr class="table-success">
+                                                            <td><strong>Neuwertig</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-success">
+                                                                    ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.neuwertig?.preis || 'N/A'}
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <small class="d-block">${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.neuwertig?.marktlage || ''}</small>
+                                                                ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.neuwertig?.vergleichsangebote?.length ?
+                                                                    `<small class="text-muted d-block mt-1">Vergleiche: ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise.neuwertig.vergleichsangebote.join(', ')}</small>`
+                                                                    : ''}
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="table-info">
+                                                            <td><strong>Sehr gut</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-info">
+                                                                    ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.sehr_gut?.preis || 'N/A'}
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <small class="d-block">${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.sehr_gut?.marktlage || ''}</small>
+                                                                ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.sehr_gut?.vergleichsangebote?.length ?
+                                                                    `<small class="text-muted d-block mt-1">Vergleiche: ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise.sehr_gut.vergleichsangebote.join(', ')}</small>`
+                                                                    : ''}
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="table-warning">
+                                                            <td><strong>Gut</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-warning text-dark">
+                                                                    ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.gut?.preis || 'N/A'}
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <small class="d-block">${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.gut?.marktlage || ''}</small>
+                                                                ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.gut?.vergleichsangebote?.length ?
+                                                                    `<small class="text-muted d-block mt-1">Vergleiche: ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise.gut.vergleichsangebote.join(', ')}</small>`
+                                                                    : ''}
+                                                            </td>
+                                                        </tr>
+                                                        <tr class="table-light">
+                                                            <td><strong>Akzeptabel</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-secondary">
+                                                                    ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.akzeptabel?.preis || 'N/A'}
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <small class="d-block">${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.akzeptabel?.marktlage || ''}</small>
+                                                                ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise?.akzeptabel?.vergleichsangebote?.length ?
+                                                                    `<small class="text-muted d-block mt-1">Vergleiche: ${data.image_analysis_results.market_data.preisanalyse.zustandsbasierte_preise.akzeptabel.vergleichsangebote.join(', ')}</small>`
+                                                                    : ''}
+                                                            </td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+
+                                <li class="mt-3"><strong>Preisvergleich Auflagen:</strong></li>
+                                <ul class="list-unstyled ps-3">
+                                    <li><strong>Aktuelle Auflage:</strong></li>
+                                    <ul class="list-unstyled ps-3">
+                                        <li><small>Durchschnitt: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.aktuelle_auflage?.durchschnitt || 'N/A'}</small></li>
+                                        <li><small>Preisspanne: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.aktuelle_auflage?.spanne || ''}</small></li>
+                                        <li><small>Trend: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.aktuelle_auflage?.trend || ''}</small></li>
+                                    </ul>
+                                    <li class="mt-2"><strong>Andere Auflagen:</strong></li>
+                                    <ul class="list-unstyled ps-3">
+                                        <li><small>Preisdifferenz: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.andere_auflagen?.preisdifferenz || ''}</small></li>
+                                        <li><small>Begründung: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.andere_auflagen?.begruendung || ''}</small></li>
+                                        <li><small>Empfehlung: ${data.image_analysis_results.market_data.preisanalyse.preisvergleich?.andere_auflagen?.empfehlung || ''}</small></li>
+                                    </ul>
+                                </ul>
+
+                                <li class="mt-3"><strong>Marktanalyse:</strong></li>
+                                <ul class="list-unstyled ps-3">
+                                    <li><strong>Verfügbarkeit:</strong></li>
+                                    <li><small>${data.image_analysis_results.market_data.marktanalyse?.verfuegbarkeit?.beschreibung || ''}</small></li>
+                                    <li class="mt-2"><strong>Sammlerwert:</strong></li>
+                                    <li><small>${data.image_analysis_results.market_data.marktanalyse?.sammlerwert?.begruendung || ''}</small></li>
+                                    <li class="mt-2"><strong>Preisfaktoren:</strong></li>
+                                    <ul class="list-unstyled ps-3">
+                                        <li><small>Auflagenunterschiede: ${data.image_analysis_results.market_data.marktanalyse?.preisfaktoren?.auflagenunterschiede || ''}</small></li>
+                                        <li><small>Zustandseinfluss: ${data.image_analysis_results.market_data.marktanalyse?.preisfaktoren?.zustandseinfluss || ''}</small></li>
+                                        <li><small>Aktuelle Nachfrage: ${data.image_analysis_results.market_data.marktanalyse?.preisfaktoren?.nachfragesituation || ''}</small></li>
+                                    </ul>
+                                </ul>
+
+                                <li class="mt-2"><strong>Konfidenz der Preisanalyse:</strong> ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100)}%</li>
+                                ` : '<li>Keine Preisanalyse verfügbar</li>'}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Marktanalyse</h5>
+                            <ul class="list-unstyled">
+                                ${data.image_analysis_results?.market_data ? `
+                                ${data.image_analysis_results.market_data.sammlerwert ? `
+                                <li><strong>Sammlerwert:</strong><br>
+                                    <small>${data.image_analysis_results.market_data.sammlerwert}</small>
+                                </li>` : ''}
+                                ${data.image_analysis_results.market_data.marktverfügbarkeit ? `
+                                <li class="mt-2"><strong>Verfügbarkeit:</strong><br>
+                                    <small>${data.image_analysis_results.market_data.marktverfügbarkeit}</small>
+                                </li>` : ''}
+                                <li class="mt-2"><strong>Preise nach Zustand:</strong></li>
+                                <li><small>Akzeptabel: ${data.image_analysis_results.market_data.gebrauchtpreise?.zustand_akzeptabel || 'nicht verfügbar'}</small></li>
+                                <li><small>Gut: ${data.image_analysis_results.market_data.gebrauchtpreise?.zustand_gut || 'nicht verfügbar'}</small></li>
+                                <li><small>Sehr gut: ${data.image_analysis_results.market_data.gebrauchtpreise?.zustand_sehr_gut || 'nicht verfügbar'}</small></li>
+                                <li class="mt-2"><strong>Konfidenz:</strong> ${Math.round((data.image_analysis_results.market_data.confidence_score || 0) * 100)}%</li>
+                                ` : '<li>Keine Marktanalyse verfügbar</li>'}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Zusatzinformationen -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h5>Zusatzinformationen</h5>
+                            <ul class="list-unstyled">
+                                ${data.summary ? `
+                                <li>
+                                    <strong>Inhalt:</strong><br>
+                                    <small>${data.summary}</small>
+                                </li>` : ''}
+                                ${data.image_analysis_results?.additional_info?.zielgruppe ? `
+                                <li class="mt-2">
+                                    <strong>Zielgruppe:</strong><br>
+                                    <small>${data.image_analysis_results.additional_info.zielgruppe}</small>
+                                </li>` : ''}
+                                ${data.image_analysis_results?.additional_info?.besonderheiten ? `
+                                <li class="mt-2">
+                                    <strong>Besonderheiten:</strong><br>
+                                    <small>${data.image_analysis_results.additional_info.besonderheiten}</small>
+                                </li>` : ''}
+                                ${data.image_analysis_results?.additional_info?.sammlungsrelevanz ? `
+                                <li class="mt-2">
+                                    <strong>Sammlungsrelevanz:</strong><br>
+                                    <small>${data.image_analysis_results.additional_info.sammlungsrelevanz}</small>
+                                </li>` : ''}
+                            </ul>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('detailsContent').innerHTML = content;
+            detailsModal.show();
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Details:', error);
+            alert('Fehler beim Laden der Buchdetails');
+        });
+}
+
+function editBook(bookId) {
+    fetch(`/books/${bookId}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('editBookId').value = bookId;
+            document.getElementById('editTitle').value = data.title || '';
+            document.getElementById('editOriginalTitle').value = data.metadata?.originaltitel || '';
+            document.getElementById('editAuthor').value = data.author || '';
+            document.getElementById('editIsbn').value = data.isbn || '';
+            document.getElementById('editPublisher').value = data.publisher || '';
+            document.getElementById('editYear').value = data.publication_year || '';
+            document.getElementById('editEdition').value = data.edition || '';
+            document.getElementById('editFormat').value = data.format || '';
+            document.getElementById('editPages').value = data.page_count || '';
+            document.getElementById('editLanguage').value = data.language || '';
+            document.getElementById('editGenre').value = data.genre || '';
+            document.getElementById('editCondition').value = data.condition || 'Good';
+            document.getElementById('editPrice').value = data.price || '';
+            document.getElementById('editDescription').value = data.description || '';
+            document.getElementById('editSummary').value = data.summary || '';
+            editModal.show();
+        })
+        .catch(error => {
+            console.error('Fehler beim Laden der Buchdaten:', error);
+            alert('Fehler beim Laden der Buchdaten');
+        });
+}
+
+function saveEdit() {
+    const bookId = document.getElementById('editBookId').value;
+    const data = {
+        title: document.getElementById('editTitle').value,
+        author: document.getElementById('editAuthor').value,
+        isbn: document.getElementById('editIsbn').value,
+        publisher: document.getElementById('editPublisher').value,
+        publication_year: parseInt(document.getElementById('editYear').value) || null,
+        edition: document.getElementById('editEdition').value,
+        format: document.getElementById('editFormat').value,
+        page_count: parseInt(document.getElementById('editPages').value) || null,
+        language: document.getElementById('editLanguage').value,
+        genre: document.getElementById('editGenre').value,
+        condition: document.getElementById('editCondition').value,
+        price: parseFloat(document.getElementById('editPrice').value) || 0,
+        description: document.getElementById('editDescription').value,
+        summary: document.getElementById('editSummary').value,
+        metadata: {
+            originaltitel: document.getElementById('editOriginalTitle').value
+        }
+    };
+
+    fetch(`/books/${bookId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(() => {
+        editModal.hide();
+        window.location.reload();
+    })
+    .catch(error => {
+        console.error('Fehler beim Speichern:', error);
+        alert('Fehler beim Speichern der Änderungen');
+    });
+}
+
+function deleteBook(bookId) {
+    if (confirm('Sind Sie sicher, dass Sie dieses Buch löschen möchten?')) {
+        fetch(`/books/${bookId}`, { method: 'DELETE' })
+            .then(() => window.location.reload())
+            .catch(error => {
+                console.error('Fehler beim Löschen:', error);
+                alert('Fehler beim Löschen des Buchs');
+            });
+    }
+}
+
+function uploadToBooklooker(bookId) {
+    // Status-Anzeige einblenden
+    const statusDiv = document.getElementById(`booklookerStatus_${bookId}`);
+    const uploadButton = document.getElementById(`booklookerBtn_${bookId}`);
+    statusDiv.style.display = 'block';
+    uploadButton.disabled = true;
+
+    fetch(`/books/${bookId}/upload-to-booklooker`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        statusDiv.innerHTML = `
+            <div class="alert ${data.success ? 'alert-success' : 'alert-danger'}">
+                ${data.message}
+            </div>`;
+        if (!data.success) {
+            uploadButton.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Fehler beim Booklooker Upload:', error);
+        statusDiv.innerHTML = `
+            <div class="alert alert-danger">
+                Upload fehlgeschlagen: ${error.message}
+            </div>`;
+        uploadButton.disabled = false;
+    });
+}
+
+function validateFiles(input) {
+    const form = document.getElementById('uploadForm');
+    const submitButton = form.querySelector('button[type="submit"]');
+    let totalSize = 0;
+    
+    // Lösche vorherige Fehlermeldungen
+    const oldErrors = form.parentElement.querySelectorAll('.alert');
+    oldErrors.forEach(error => error.remove());
+    
+    const feedbackDiv = document.getElementById('validationFeedback');
+    feedbackDiv.innerHTML = '';
+
+    // Aktiviere den Submit-Button standardmäßig
+    submitButton.disabled = false;
+    
+    if (input.files.length === 0) {
+        showValidationError('Bitte wählen Sie mindestens ein Bild aus.');
+        submitButton.disabled = true;
+        return false;
+    }
+    
+    for (let file of input.files) {
+        if (!file.type.startsWith('image/')) {
+            showValidationError(`Die Datei "${file.name}" ist kein gültiges Bildformat.`);
+            submitButton.disabled = true;
+            return false;
+        }
+        
+        totalSize += file.size;
+    }
+    
+    if (totalSize > GEMINI_MAX_SIZE) {
+        showValidationError(`Die Gesamtgröße der Bilder (${(totalSize / (1024 * 1024)).toFixed(1)}MB) überschreitet das Gemini-Limit von 20MB.`);
+        submitButton.disabled = true;
+        return false;
+    }
+    
+    // Zeige Erfolgsmeldung
+    feedbackDiv.innerHTML = `
+        <div class="alert alert-success alert-dismissible fade show">
+            <strong>OK:</strong> ${input.files.length} Bild${input.files.length !== 1 ? 'er' : ''} ausgewählt
+            (Gesamt: ${(totalSize / (1024 * 1024)).toFixed(1)}MB)
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    return true;
+}
+
+function checkBooklookerStatus(bookId) {
+    // Status-Anzeige einblenden
+    const statusDiv = document.getElementById(`booklookerStatus_${bookId}`);
+    const statusText = document.getElementById(`booklookerStatusText_${bookId}`);
+    statusDiv.style.display = 'block';
+    statusText.textContent = 'Prüfe Status...';
+
+    fetch(`/books/${bookId}/booklooker-status`)
+        .then(response => response.json())
+        .then(data => {
+            let alertClass = data.success ? 'alert-success' : 'alert-danger';
+            statusDiv.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${data.message}
+                </div>`;
+        })
+        .catch(error => {
+            console.error('Fehler bei der Status-Abfrage:', error);
+            statusDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    Fehler bei der Status-Abfrage: ${error.message}
+                </div>`;
+        });
+}
+
+// Remove duplicate function
+
+function handleUpload(e) {
+    e.preventDefault();
+    
+    const form = document.getElementById('uploadForm');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const files = document.getElementById('images').files;
+    const weight = document.getElementById('weight').value;
+    
+    // Lösche vorherige Fehlermeldungen
+    const oldErrors = form.parentElement.querySelectorAll('.alert');
+    oldErrors.forEach(error => error.remove());
+    
+    // Validiere das Gewicht
+    if (!weight || weight <= 0) {
+        showError(form, 'Bitte geben Sie ein gültiges Gewicht in Gramm ein.');
+        return;
+    }
+    
+    // Validiere die Dateien erneut vor dem Upload
+    if (!validateFiles(document.getElementById('images'))) {
+        return;
+    }
+    
+    // Erstelle FormData
+    const formData = new FormData();
+    for (let file of files) {
+        formData.append('images', file);
+    }
+    formData.append('weight', weight);
+    
+    // Zeige Upload-Fortschritt
+    const progressBar = document.querySelector('#uploadProgress .progress-bar');
+    const progressDiv = document.getElementById('uploadProgress');
+    progressDiv.classList.remove('d-none');
+    submitButton.disabled = true;
+    updateProgress(0, 'Starte Upload...');
+    
+    fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(async response => {
+        updateProgress(50, 'Analysiere Bilder...');
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || 'Unbekannter Fehler beim Upload');
+        }
+        updateProgress(100, 'Upload erfolgreich!');
+        return data;
+    })
+    .then(() => {
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+    })
+    .catch(error => {
+        console.error('Fehler beim Upload:', error);
+        showValidationError(error.message);
+        submitButton.disabled = false;
+    })
+    .finally(() => {
+        setTimeout(() => {
+            progressDiv.classList.add('d-none');
+            progressBar.style.width = '0%';
+        }, 1000);
+    });
+}
+
+function showValidationError(message) {
+    const feedbackDiv = document.getElementById('validationFeedback');
+    feedbackDiv.innerHTML = `
+        <div class="alert alert-danger alert-dismissible fade show">
+            <strong>Fehler:</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+}
+
+function updateProgress(progress, status) {
+    const progressBar = document.querySelector('#uploadProgress .progress-bar');
+    const progressText = progressBar.querySelector('.progress-text');
+    progressBar.style.width = `${progress}%`;
+    if (status) {
+        progressText.textContent = status;
+    }
+}
+
+function showError(form, message) {
+    showValidationError(message);
+}
+</script>
+{% endblock %}
