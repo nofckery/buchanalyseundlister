@@ -17,18 +17,19 @@ def setup_directories():
     for dir_path in dirs:
         dir_path.mkdir(parents=True, exist_ok=True)
 
-def main():
-    """Hauptfunktion zum Starten der Anwendung"""
-    # Erstelle Verzeichnisse
-    setup_directories()
-    
-    # Erstelle und konfiguriere App
-    app = create_app()
-    
-    # Initialisiere Datenbank
+# Erstelle und konfiguriere App auf Modulebene für Gunicorn
+setup_directories()
+app = create_app()
+
+# Initialisiere Datenbank wenn möglich
+try:
     with app.app_context():
         db.create_all()
-    
+except Exception as e:
+    app.logger.error(f"Fehler bei der Datenbankinitialisierung: {e}")
+
+def main():
+    """Hauptfunktion zum Starten der Anwendung im Entwicklungsmodus"""
     # Starte Anwendung
     app.run(debug=True)
 

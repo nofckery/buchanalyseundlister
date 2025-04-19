@@ -60,13 +60,63 @@
                                     <span><i class="fas fa-book text-primary"></i> Buchpreis:</span>
                                     <strong>{{ "%.2f"|format(book.price or 0) }} €</strong>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span><i class="fas fa-shipping-fast text-primary"></i> Versandkosten:</span>
-                                    <strong>{{ "%.2f"|format(book.to_dict().shipping_cost) }} €</strong>
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span><i class="fas fa-shipping-fast text-primary"></i> Versandkosten (günstigste):</span>
+                                        <strong>{{ "%.2f"|format(book.to_dict().shipping.cheapest_de) }} €</strong>
+                                    </div>
+                                    <!-- Versandoptionen Dropdown -->
+                                    <div class="shipping-options small">
+                                        {% set shipping = book.to_dict().shipping %}
+                                        {% if shipping and shipping.all_options %}
+                                            <div class="mt-2">
+                                                <strong><i class="fas fa-info-circle"></i> Verfügbare Versandoptionen:</strong>
+                                                <!-- DHL Optionen -->
+                                                {% if shipping.all_options.DHL %}
+                                                    <div class="ms-3 mt-1">
+                                                        <strong>DHL:</strong>
+                                                        {% if shipping.all_options.DHL.DE %}
+                                                            <div class="ms-3">
+                                                                Deutschland:
+                                                                {% if shipping.all_options.DHL.DE.Büchersendung %}
+                                                                    <div class="text-success">Büchersendung: {{ "%.2f"|format(shipping.all_options.DHL.DE.Büchersendung) }} €</div>
+                                                                {% endif %}
+                                                                {% if shipping.all_options.DHL.DE.Paket %}
+                                                                    <div>Paket: {{ "%.2f"|format(shipping.all_options.DHL.DE.Paket) }} €</div>
+                                                                {% endif %}
+                                                            </div>
+                                                        {% endif %}
+                                                        {% if shipping.all_options.DHL.EU and shipping.all_options.DHL.EU.Paket %}
+                                                            <div class="ms-3">EU: {{ "%.2f"|format(shipping.all_options.DHL.EU.Paket) }} €</div>
+                                                        {% endif %}
+                                                        {% if shipping.all_options.DHL.INT and shipping.all_options.DHL.INT.Paket %}
+                                                            <div class="ms-3">International: {{ "%.2f"|format(shipping.all_options.DHL.INT.Paket) }} €</div>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endif %}
+                                                
+                                                <!-- Hermes Optionen -->
+                                                {% if shipping.all_options.Hermes %}
+                                                    <div class="ms-3 mt-1">
+                                                        <strong>Hermes:</strong>
+                                                        {% if shipping.all_options.Hermes.DE and shipping.all_options.Hermes.DE.Paket %}
+                                                            <div class="ms-3">Deutschland: {{ "%.2f"|format(shipping.all_options.Hermes.DE.Paket) }} €</div>
+                                                        {% endif %}
+                                                        {% if shipping.all_options.Hermes.EU and shipping.all_options.Hermes.EU.Paket %}
+                                                            <div class="ms-3">EU: {{ "%.2f"|format(shipping.all_options.Hermes.EU.Paket) }} €</div>
+                                                        {% endif %}
+                                                        {% if shipping.all_options.Hermes.INT and shipping.all_options.Hermes.INT.Paket %}
+                                                            <div class="ms-3">International: {{ "%.2f"|format(shipping.all_options.Hermes.INT.Paket) }} €</div>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-1">
                                     <span class="fw-bold">Gesamtpreis:</span>
-                                    <strong class="total-price">{{ "%.2f"|format(book.to_dict().total_price) }} €</strong>
+                                    <strong class="total-price">{{ "%.2f"|format(float(book.price or 0) + book.to_dict().shipping.cheapest_de) }} €</strong>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -877,30 +927,95 @@ function handleUpload(e) {
         body: formData
     })
     .then(async response => {
-        updateProgress(50, 'Analysiere Bilder...');
+        updateProgress(50, 'Analyse gestartet...'); // Status aktualisieren
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data.error || 'Unbekannter Fehler beim Upload');
+            // Wenn Backend einen Fehler meldet (z.B. 500 bei Analysefehler)
+            throw new Error(data.error || `Serverfehler: ${response.status}`);
         }
-        updateProgress(100, 'Upload erfolgreich!');
-        return data;
+        // Backend meldet Erfolg (201), Analyse läuft noch oder ist fertig
+        // Starte Polling mit der zurückgegebenen Buch-ID
+        console.log("Received data from /upload:", data); // Logge die gesamte Antwort
+        if (data.book && data.book.id) {
+             console.log(`Received book ID: ${data.book.id}. Starting polling.`); // Log vor dem Polling-Start
+             updateProgress(75, 'Warte auf Analyseergebnisse...');
+             pollStatus(data.book.id);
+        } else {
+             console.error("Response OK, but book ID missing in response data:", data); // Logge, wenn ID fehlt
+             throw new Error('Keine Buch-ID vom Server erhalten.');
+        }
+        // Kein return data mehr hier, da wir auf Polling warten
     })
-    .then(() => {
-        setTimeout(() => {
-            window.location.reload();
-        }, 1000);
-    })
+    // Entferne den direkten Reload hier
+    // .then(() => { ... })
     .catch(error => {
         console.error('Fehler beim Upload:', error);
         showValidationError(error.message);
         submitButton.disabled = false;
     })
+    // finally wird erst nach Abschluss des Pollings oder bei Fehler ausgeführt
     .finally(() => {
-        setTimeout(() => {
-            progressDiv.classList.add('d-none');
-            progressBar.style.width = '0%';
-        }, 1000);
+        // submitButton erst hier wieder aktivieren, falls kein Reload erfolgt (z.B. bei Fehler)
+        // submitButton.disabled = false; // Überlege, ob das nötig ist, da bei Erfolg eh neu geladen wird
+        // Fortschrittsbalken ausblenden, falls kein Reload erfolgt
+        // setTimeout(() => { ... }, 1000); // Nicht mehr hier, wird im Polling oder Fehlerfall behandelt
     });
+}
+
+// Neue Funktion zum Abfragen des Status
+function pollStatus(bookId) {
+    console.log(`Starting status polling for book ID: ${bookId}`);
+    const intervalId = setInterval(() => {
+        console.log(`Polling status for book ID: ${bookId}`);
+        fetch(`/books/${bookId}/status`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Statusabfrage fehlgeschlagen: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(`Received status: ${data.status} for book ID: ${bookId}`);
+                if (data.status === 'COMPLETED') {
+                    clearInterval(intervalId);
+                    console.log(`Status COMPLETED for book ID: ${bookId}. Reloading page.`);
+                    updateProgress(100, 'Analyse abgeschlossen!');
+                    // Füge eine kurze Verzögerung vor dem Reload hinzu, um DB-Sichtbarkeit zu gewährleisten
+                    setTimeout(() => {
+                         console.log(`Reloading page now for book ID: ${bookId}`);
+                         window.location.reload();
+                    }, 1500); // 1.5 Sekunden Verzögerung
+                } else if (data.status === 'ERROR') {
+                    clearInterval(intervalId);
+                    showValidationError('Fehler bei der Buchanalyse im Backend.');
+                    // Fortschrittsbalken ausblenden und Button aktivieren
+                    document.getElementById('uploadProgress').classList.add('d-none');
+                    document.querySelector('#uploadForm button[type="submit"]').disabled = false;
+                } else {
+                    // Status ist noch 'PROCESSING' oder 'UNKNOWN'
+                    updateProgress(85, 'Analyse läuft...'); // Fortschritt leicht erhöhen
+                }
+            })
+            .catch(error => {
+                clearInterval(intervalId);
+                console.error('Fehler beim Status-Polling:', error);
+                showValidationError('Fehler beim Abrufen des Analysestatus.');
+                 // Fortschrittsbalken ausblenden und Button aktivieren
+                document.getElementById('uploadProgress').classList.add('d-none');
+                document.querySelector('#uploadForm button[type="submit"]').disabled = false;
+            });
+    }, 3000); // Alle 3 Sekunden prüfen
+}
+
+// Korrigierte Position für updateProgress
+function updateProgress(progress, status) {
+    console.log(`Updating progress: ${progress}%, Status text: ${status}`); // Debugging Log
+    const progressBar = document.querySelector('#uploadProgress .progress-bar');
+    const progressText = progressBar.querySelector('.progress-text');
+    progressBar.style.width = `${progress}%`;
+    if (status) {
+        progressText.textContent = status;
+    }
 }
 
 function showValidationError(message) {

@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.env
+.env.example
+
+# Entwicklung
+instance/
+*.db
+logs/
+*.log
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Temporäre Dateien
+temp/
+tmp/
+
+# Testdaten
+tests/
+test_*.py
+
+# Dokumentation
+*.md
+LICENSE
+
+# Lokale Uploads und Cache
+app/static/uploads/*
+app/cache/*
+
+# Migration-Skripte
+migrations/versions/
+
+# Deployment
+Dockerfile
+.dockerignore
+create_secrets.ps1

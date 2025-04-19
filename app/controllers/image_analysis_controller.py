@@ -8,6 +8,8 @@ from typing import Dict, Any, List
 import google.generativeai as genai
 from PIL import Image
 from flask import current_app as app
+import requests # Hinzugefügt für URL-Downloads
+import io # Hinzugefügt für BytesIO
 
 class ImageAnalysisController:
     def __init__(self, api_key: str):
@@ -17,7 +19,7 @@ class ImageAnalysisController:
                 genai.configure(api_key=api_key)
                 
                 # Verwende das Pro-Modell für Multimodal-Analyse
-                model_name = 'models/gemini-2.0-flash'
+                model_name = 'gemini-2.5-pro-exp-03-25'
                 app.logger.info(f"Initialisiere Gemini-Modell: {model_name}")
                 
                 self.model = genai.GenerativeModel(model_name)
@@ -28,27 +30,52 @@ class ImageAnalysisController:
                 raise ValueError(error_msg)
 
 
-    def analyze_book_images(self, book_id: int, image_paths: List[str]) -> Dict[str, Any]:
+    def analyze_book_images(self, book_id: int, image_urls: List[str]) -> Dict[str, Any]: # Parameter umbenannt
         """
-        Analysiert mehrere Buchbilder und extrahiert relevante Metadaten.
+        Analysiert mehrere Buchbilder von URLs und extrahiert relevante Metadaten.
         """
         try:
-            # Lade alle Bilder
-            images = [Image.open(path) for path in image_paths]
+            # Lade alle Bilder von URLs
+            images = []
+            for url in image_urls:
+                try:
+                    response = requests.get(url, stream=True, timeout=10) # Timeout hinzugefügt
+                    response.raise_for_status() # Fehler bei schlechtem Status werfen
+                    # Bildinhalt in BytesIO-Objekt laden, damit PIL es öffnen kann
+                    image_data = io.BytesIO(response.content)
+                    images.append(Image.open(image_data))
+                    app.logger.debug(f"Bild von URL geladen: {url}")
+                except requests.exceptions.RequestException as req_err:
+                    app.logger.error(f"Fehler beim Herunterladen von Bild {url}: {req_err}")
+                    # Optional: Fehler werfen oder mit den restlichen Bildern fortfahren
+                    # Hier fahren wir fort, aber loggen den Fehler
+                    continue # Zum nächsten Bild springen
+                except Exception as img_err:
+                     app.logger.error(f"Fehler beim Öffnen von Bild von URL {url}: {img_err}")
+                     continue # Zum nächsten Bild springen
+
+            if not images:
+                 app.logger.error("Keine Bilder konnten erfolgreich von URLs geladen werden.")
+                 # Rückgabe eines Fehlerobjekts, das dem bestehenden Fehlerhandling entspricht
+                 raise ValueError("Keine Bilder konnten erfolgreich von URLs geladen werden.")
             
             # Erstelle den Analyse-Prompt
             prompt = self._create_analysis_prompt()
+            app.logger.info(f"Gemini-Prompt wird gesendet:\n{prompt[:500]}...") # Log Prompt Start
             
             # Führe Gemini-Analyse mit allen Bildern durch
+            app.logger.info("Starte Gemini-Analyse...")
             response = self.model.generate_content([prompt, *images])
             
             if not response or not response.text:
                 raise ValueError("Keine Antwort vom Gemini-Modell")
                 
-            app.logger.debug(f"Gemini-Antwort: {response.text[:200]}...")
+            app.logger.info(f"Rohe Gemini-Antwort empfangen (Länge: {len(response.text)} Zeichen). Start:\n{response.text[:500]}...") # Log Raw Response Start
             
             # Extrahiere strukturierte Daten
+            app.logger.info("Parse Gemini-Antwort...")
             analysis_results = self._parse_gemini_response(response.text)
+            app.logger.info(f"Geparste Analyse-Ergebnisse (Auszug): {str(analysis_results)[:500]}...") # Log Parsed Results
             
             # Validiere und ergänze die Daten
             self._enrich_metadata(analysis_results)
@@ -327,26 +354,46 @@ class ImageAnalysisController:
         """
         Parst die Gemini API Antwort und strukturiert die Daten.
         """
-        try:
-            # Extrahiere JSON aus der Antwort
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
+        # Versuche, JSON aus Markdown-Code-Block zu extrahieren
+        match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if match:
+            json_str = match.group(1)
+            app.logger.debug(f"JSON aus Markdown extrahiert: {json_str[:200]}...")
+            try:
+                parsed_data = json.loads(json_str)
+                app.logger.info(f"Erfolgreich aus Markdown geparst. Ergebnis (Auszug): {str(parsed_data)[:200]}...")
+                return parsed_data
+            except json.JSONDecodeError as e:
+                app.logger.error(f"Fehler beim Parsen von JSON aus Markdown: {e}")
+                # Statt Fallback: Fehler auslösen, um das Problem anzuzeigen
+                raise ValueError(f"Ungültiges JSON im Markdown-Block: {e}") from e
+
+        # Fallback: Versuche, das äußerste JSON-Objekt zu finden
+        json_start = response_text.find('{')
+        json_end = response_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = response_text[json_start:json_end]
+            app.logger.debug(f"JSON durch Klammernsuche extrahiert: {json_str[:200]}...")
+            try:
+                # Versuche, das extrahierte JSON zu parsen
+                parsed_data = json.loads(json_str)
+                app.logger.info(f"Erfolgreich aus Klammernsuche geparst. Ergebnis (Auszug): {str(parsed_data)[:200]}...")
+                return parsed_data
+            except json.JSONDecodeError as e:
+                app.logger.error(f"Fehler beim Parsen von JSON aus Klammernsuche: {e}")
+                # Statt Fallback: Fehler auslösen
+                raise ValueError(f"Ungültiges JSON bei Klammernsuche: {e}") from e
+
+        # Wenn keine der Methoden einen JSON-String findet
+        app.logger.warning("Kein JSON-String in der Gemini-Antwort gefunden.")
+        raise ValueError("Kein JSON-String in der Gemini-Antwort gefunden.")
             
-            if json_start >= 0 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                # Bereinige JSON-String
-                json_str = json_str.replace("'", '"')  # Ersetze Single Quotes
-                json_str = re.sub(r'([{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_str)  # Füge Anführungszeichen um Schlüssel hinzu
-                app.logger.debug(f"Bereinigtes JSON: {json_str[:200]}...")
-                return json.loads(json_str)
-                
-            app.logger.warning("Kein JSON in Antwort gefunden")
-            return {}
-            
-        except Exception as e:
-            error_msg = f"Fehler beim Parsen der Gemini-Antwort: {str(e)}"
-            app.logger.error(f"{error_msg}\n{traceback.format_exc()}")
-            return {}
+        # Entferne den allgemeinen Exception-Handler, um Fehler nach oben durchzureichen
+        # except Exception as e:
+        #     error_msg = f"Fehler beim Parsen der Gemini-Antwort: {str(e)}"
+        #     app.logger.error(f"{error_msg}\n{traceback.format_exc()}")
+        #     # Statt {} zurückzugeben, Fehler weiterleiten
+        #     raise ValueError(f"Unerwarteter Fehler beim Parsen: {e}") from e
 
     def _enrich_metadata(self, analysis_results: Dict[str, Any]):
         """

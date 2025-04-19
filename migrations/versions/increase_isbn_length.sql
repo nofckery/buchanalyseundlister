@@ -1,0 +1,2 @@
+-- Increase ISBN length
+ALTER TABLE book ALTER COLUMN isbn TYPE VARCHAR(20);

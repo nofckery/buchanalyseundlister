@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -24,35 +25,20 @@ wheels/
 venv/
 ENV/
 
-# IDE
+# IDEs
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Environment variables
+# Anwendungsspezifisch
 .env
+app/static/uploads/*
+!app/static/uploads/.gitkeep
 
-# Database
-*.db
+# Datenbank
 *.sqlite
-*.sqlite3
+*.db
 
 # Logs
 *.log
-logs/
-
-# Upload directories
-app/static/uploads/raw/*
-app/static/uploads/processed/*
-!app/static/uploads/raw/.gitkeep
-!app/static/uploads/processed/.gitkeep
-
-# Cache
-app/cache/
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Migrations
-migrations/versions/

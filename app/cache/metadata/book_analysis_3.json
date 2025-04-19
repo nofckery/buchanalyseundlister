@@ -1,0 +1,74 @@
+{
+  "timestamp": "2025-03-05T11:42:44.015550",
+  "data": {
+    "metadata": {
+      "deutscher_titel": "Ein Geheimnis",
+      "originaltitel": "Un secret",
+      "autor": "Philippe Grimbert",
+      "isbn": "978-3-518-45920-1",
+      "verlag": "Suhrkamp",
+      "erscheinungsjahr": 2015,
+      "auflage": "9. Auflage",
+      "format": "Taschenbuch",
+      "seitenanzahl": null,
+      "sprache": "Deutsch",
+      "genre": "Roman"
+    },
+    "condition_analysis": {
+      "zustand_beschreibung": "Das Buch befindet sich in einem guten Zustand. Es weist minimale Gebrauchsspuren auf, insbesondere an den Ecken und Kanten des Covers. Keine Beschädigungen am Buchrücken erkennbar. Der Einband wirkt sauber und unbeschädigt.",
+      "maengel_besonderheiten": "Leichte Gebrauchsspuren am Cover",
+      "zustand_einschätzung": "Gut",
+      "confidence_score": 0.9
+    },
+    "market_data": {
+      "neupreis": "7.20 EUR",
+      "gebrauchtpreise": {
+        "zustand_akzeptabel": "1-3 EUR",
+        "zustand_gut": "3-5 EUR",
+        "zustand_sehr_gut": "5-7 EUR"
+      },
+      "sammlerwert": "Gering, da es sich um eine spätere Auflage handelt.",
+      "marktverfügbarkeit": "Hoch",
+      "empfohlener_verkaufspreis": "3-5 EUR",
+      "confidence_score": 0.8
+    },
+    "additional_info": {
+      "inhaltszusammenfassung": "Der Roman erzählt die Geschichte einer jüdischen Familie in Paris während der deutschen Besatzung, aus der Sicht eines Nachgeborenen.",
+      "zielgruppe": "Leser von historischer Literatur, Familienromanen und Literatur über das Thema Holocaust.",
+      "besonderheiten": "Es handelt sich um die deutsche Übersetzung des französischen Romans \"Un secret\".",
+      "auszeichnungen": "Keine expliziten Auszeichnungen auf dem Cover genannt.",
+      "sammlungsrelevanz": "Geringe Sammlungsrelevanz, es sei denn, es handelt sich um eine signierte Ausgabe oder eine spezielle Edition.",
+      "confidence_score": 0.7
+    },
+    "validation_sources": {
+      "open_library": {
+        "url": "https://openlibrary.org/books/OL45988480M/Ein_Geheimnis",
+        "key": "/books/OL45988480M",
+        "title": "Ein Geheimnis",
+        "authors": [
+          {
+            "url": "https://openlibrary.org/authors/OL1624391A/Philippe_Grimbert",
+            "name": "Philippe Grimbert"
+          }
+        ],
+        "identifiers": {
+          "isbn_10": [
+            "3518459201"
+          ],
+          "isbn_13": [
+            "9783518459201"
+          ],
+          "openlibrary": [
+            "OL45988480M"
+          ]
+        },
+        "publishers": [
+          {
+            "name": "Suhrkamp Verlag KG"
+          }
+        ],
+        "publish_date": "2007-11-30"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-03-05T11:42:44.014122",
+  "data": {
+    "url": "https://openlibrary.org/books/OL45988480M/Ein_Geheimnis",
+    "key": "/books/OL45988480M",
+    "title": "Ein Geheimnis",
+    "authors": [
+      {
+        "url": "https://openlibrary.org/authors/OL1624391A/Philippe_Grimbert",
+        "name": "Philippe Grimbert"
+      }
+    ],
+    "identifiers": {
+      "isbn_10": [
+        "3518459201"
+      ],
+      "isbn_13": [
+        "9783518459201"
+      ],
+      "openlibrary": [
+        "OL45988480M"
+      ]
+    },
+    "publishers": [
+      {
+        "name": "Suhrkamp Verlag KG"
+      }
+    ],
+    "publish_date": "2007-11-30"
+  }
+}
