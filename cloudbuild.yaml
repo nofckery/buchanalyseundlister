@@ -4,7 +4,7 @@ timeout: '3600s'  # 1 Stunde Timeout für komplexe Builds
 # Substitutions für verschiedene Umgebungen
 substitutions:
   _ENV: 'development'  # Default-Umgebung
-  _REGION: 'europe-west3'
+  _REGION: 'europe-west1'
   _SERVICE: 'buchanalyse-service'
   _REDIS_HOST: "ihr-redis-host"
   _REDIS_PORT: "ihr-redis-port"
