@@ -1,0 +1,296 @@
+# Cloud Build Configuration
+timeout: '3600s'  # 1 Stunde Timeout für komplexe Builds
+
+# Substitutions für verschiedene Umgebungen
+substitutions:
+  _ENV: 'development'  # Default-Umgebung
+  _REGION: 'europe-west3'
+  _SERVICE: 'buchanalyse-service'
+  _REDIS_HOST: "ihr-redis-host"
+  _REDIS_PORT: "ihr-redis-port"
+  # COMMIT_SHA wird explizit übergeben, keine Deklaration hier nötig
+
+# Build Steps
+steps:
+# 1. Tests und Linting
+- name: 'python:3.9'
+  id: 'install-dependencies'
+  entrypoint: pip
+  args: ['install', '-r', 'requirements.txt', '-r', 'requirements-dev.txt']
+  env:
+    - 'PYTHONPATH=/workspace'
+    - 'TESTING=true'
+
+- name: 'python:3.9'
+  id: 'run-tests'
+  entrypoint: pytest
+  args: [
+    '--junitxml=test-reports/junit.xml',
+    '--cov=app',
+    '--cov-report=xml:coverage-reports/coverage.xml',
+    '--cov-report=html:coverage-reports/html'
+  ]
+  env:
+    - 'REDIS_HOST=redis-test'
+    - 'REDIS_PORT=6379'
+    - 'TESTING=true'
+  waitFor: ['install-dependencies']
+
+- name: 'python:3.9'
+  id: 'lint'
+  entrypoint: bash
+  args:
+    - '-c'
+    - |
+      pip install flake8 black mypy isort
+      flake8 app tests
+      black --check app tests
+      isort --check-only app tests
+      mypy app
+  waitFor: ['install-dependencies']
+
+# Terraform Format Check (im Hauptverzeichnis)
+- name: 'hashicorp/terraform:1.0.0'
+  id: 'terraform-fmt-check'
+  dir: 'terraform' # Prüft das gesamte Terraform-Verzeichnis
+  entrypoint: 'terraform'
+  args: ['fmt', '-check', '-recursive']
+  waitFor: ['-'] # Kann früh parallel laufen
+
+# 2. Security Scans (ersetzt durch detailliertere Scans unten)
+# Entfernt
+
+# 3. Container Build mit Cache
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'build-container'
+  args: [
+    'build',
+    # Verwende nur den Commit SHA als Tag für die Eindeutigkeit
+    '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA',
+    # Cache von vorherigem Build mit demselben Tag oder latest (falls vorhanden)
+    '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA',
+    '--cache-from', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:latest',
+    '.'
+  ]
+  waitFor: ['-']  # Parallel zu Tests starten
+
+# 4. Erweiterte Security Scans (Schnell)
+# Installiere Security Tools
+- name: 'python:3.9'
+  id: 'install-security-tools'
+  entrypoint: pip
+  args: ['install', '-r', 'requirements-security.txt']
+  waitFor: ['install-dependencies']
+
+# Statische Code Analyse (Bandit, Safety, detect-secrets)
+- name: 'python:3.9'
+  id: 'static-security-analysis'
+  entrypoint: bash
+  args:
+    - '-c'
+    - |
+      mkdir -p security-reports # Sicherstellen, dass das Verzeichnis existiert
+      bandit -r app -f json -o security-reports/bandit.json || echo "Bandit found issues"
+      safety check -r requirements.txt --full-report -o security-reports/safety.txt || echo "Safety found issues"
+      detect-secrets scan > security-reports/secrets.json || echo "Detect-secrets found issues"
+      # Fügen Sie hier ggf. Logik hinzu, um den Build bei Funden fehlschlagen zu lassen (exit 1)
+  waitFor: ['install-security-tools']
+
+# OWASP Dependency Check
+- name: 'owasp/dependency-check'
+  id: 'dependency-check'
+  args:
+    - '--project'
+    - 'Buchanalyse'
+    - '--scan'
+    - '.'
+    - '--format'
+    - 'JSON' # JSON für einfachere Verarbeitung, HTML kann in der separaten Pipeline generiert werden
+    - '--out'
+    - 'security-reports/dependency-check'
+    # '--suppression' # Ggf. Suppressionsdatei hinzufügen
+    - '--failOnCVSS'
+    - '7' # Beispiel: Build fehlschlagen lassen bei CVSS >= 7
+  waitFor: ['install-dependencies'] # Kann parallel zu static-security-analysis laufen
+
+# Container Scanning (Trivy)
+- name: 'aquasec/trivy'
+  id: 'container-scan-trivy'
+  args: [
+    'image',
+    '--exit-code', '1', # Build fehlschlagen lassen bei Funden
+    '--severity', 'HIGH,CRITICAL', # Nur bei HIGH oder CRITICAL fehlschlagen
+    '--format', 'json', # JSON für Reports
+    '--output', 'security-reports/container-scan-trivy.json',
+    '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA'
+  ]
+  waitFor: ['build-container'] # Muss nach dem Build laufen
+
+# 5. Container Push
+- name: 'gcr.io/cloud-builders/docker'
+  id: 'push-container'
+  args: [
+    'push',
+    '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA'
+  ]
+  # Muss auf alle vorherigen Scans warten
+  waitFor: ['static-security-analysis', 'dependency-check', 'container-scan-trivy']
+
+# 6. Check Container Analysis Results
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: 'check-container-analysis'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      echo "Checking Container Analysis for image: ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA"
+      gcloud artifacts docker images describe \
+        "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA" \
+        --show-package-vulnerability \
+        --format=json > vulnerability-scan-results.json
+
+      echo "Vulnerability scan results:"
+      cat vulnerability-scan-results.json
+
+      # Python Skript zum Prüfen auf kritische Schwachstellen
+      cat <<EOF > check_vulnerabilities.py
+      import json
+      import sys
+
+      critical_found = False
+      with open('vulnerability-scan-results.json') as f:
+          data = json.load(f)
+          if 'package_vulnerability' in data and 'vulnerabilities' in data['package_vulnerability']:
+              for vulnerability in data['package_vulnerability']['vulnerabilities']:
+                  if vulnerability.get('effective_severity') == 'CRITICAL':
+                      print(f"CRITICAL vulnerability found: {vulnerability.get('cve_id')}")
+                      critical_found = True
+      if critical_found:
+          print("Critical vulnerabilities found. Failing build.")
+          sys.exit(1)
+      else:
+          print("No critical vulnerabilities found.")
+          sys.exit(0)
+      EOF
+      python check_vulnerabilities.py
+  waitFor: ['push-container']
+
+# 7. Terraform Infrastructure Update
+- name: 'hashicorp/terraform:1.0.0'
+  id: 'terraform-init'
+  # Arbeitet im spezifischen Umgebungsverzeichnis
+  dir: 'terraform/environments/${_ENV}'
+  args: [
+    'init' # Backend-Konfig wird aus der .tf-Datei im Verzeichnis gelesen
+  ]
+
+# Terraform Validate (im Umgebungsverzeichnis)
+- name: 'hashicorp/terraform:1.0.0'
+  id: 'terraform-validate'
+  dir: 'terraform/environments/${_ENV}'
+  entrypoint: 'terraform'
+  args: ['validate']
+  waitFor: ['terraform-init'] # Muss nach init laufen
+
+- name: 'hashicorp/terraform:1.0.0'
+  id: 'terraform-plan'
+  # Arbeitet im spezifischen Umgebungsverzeichnis
+  dir: 'terraform/environments/${_ENV}'
+  args: [
+    'plan',
+    # Var-File ist jetzt im selben Verzeichnis
+    '-var-file=terraform.tfvars',
+    # Übergabe der Variablen, die nicht im tfvars stehen oder überschrieben werden sollen
+    '-var', 'project_id=$PROJECT_ID',
+    '-var', 'region=${_REGION}',
+    '-var', 'container_image_tag=$COMMIT_SHA', # Image-Tag übergeben
+    # Redis-Variablen entfernt, da Redis nun via TF verwaltet wird
+    '-out=tfplan'
+  ]
+  waitFor: ['terraform-validate'] # Muss nach validate laufen
+
+# 7. Terraform Apply
+- name: 'hashicorp/terraform:1.0.0'
+  id: 'terraform-apply'
+  dir: 'terraform/environments/${_ENV}'
+  args: [
+    'apply',
+    '-auto-approve',
+    'tfplan' # Wende den gespeicherten Plan an
+  ]
+  # Muss warten bis Plan erstellt, Image gepusht UND Scans erfolgreich waren
+  waitFor: ['terraform-plan', 'check-container-analysis', 'static-security-analysis', 'dependency-check', 'container-scan-trivy'] # Abhängigkeit von terraform-validate ist implizit durch terraform-plan abgedeckt
+
+# 9. Integration Tests
+- name: 'python:3.9'
+  id: 'integration-tests'
+  entrypoint: pytest
+  args: [
+    'tests/integration',
+    '--junitxml=test-reports/integration.xml'
+  ]
+  env:
+    - 'REDIS_HOST=${_REDIS_HOST}'
+    - 'REDIS_PORT=${_REDIS_PORT}'
+    - 'SERVICE_URL=$(gcloud run services describe ${_SERVICE} --region ${_REGION} --format="value(status.url)")'
+  waitFor: ['terraform-apply'] # Wartet auf erfolgreiches Terraform Apply
+
+# 10. Performance Tests
+- name: 'gcr.io/cloud-builders/curl'
+  id: 'load-test'
+  entrypoint: /bin/sh
+  args:
+    - '-c'
+    - |
+      pip install locust
+      locust --headless -f tests/performance/locustfile.py \
+        --host=$(gcloud run services describe ${_SERVICE} --region ${_REGION} --format="value(status.url)") \
+        --users 50 --spawn-rate 5 --run-time 5m \
+        --html=performance-reports/report.html
+  waitFor: ['terraform-apply'] # Wartet auf erfolgreiches Terraform Apply
+
+# 11. Cache Warmup
+- name: 'gcr.io/cloud-builders/curl'
+  id: 'cache-warmup'
+  entrypoint: /bin/sh
+  args:
+    - '-c'
+    - |
+      python scripts/cache_warmup.py \
+        --service-url=$(gcloud run services describe ${_SERVICE} --region ${_REGION} --format="value(status.url)") \
+        --redis-host=${_REDIS_HOST} \
+        --redis-port=${_REDIS_PORT}
+  waitFor: ['terraform-apply'] # Wartet auf erfolgreiches Terraform Apply
+
+# Artifacts speichern
+artifacts:
+  objects:
+    location: 'gs://${PROJECT_ID}_cloudbuild/artifacts/$BUILD_ID/'
+    paths:
+      - 'test-reports/**/*'
+      - 'coverage-reports/**/*'
+      - 'security-reports/**/*'
+      - 'performance-reports/**/*'
+      - 'vulnerability-results/**/*'
+      - 'terraform/tfplan'
+      # /workspace/commit_sha.txt wird nicht mehr benötigt
+
+# Container Images
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:latest'
+
+# Build Options
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+  env:
+    - 'PYTHONUNBUFFERED=1'
+    - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
+    - 'TF_VAR_project_id=$PROJECT_ID'
+
+# Notifications
+# notifications:
+#   webhooks:
+#     - url: 'https://chat.googleapis.com/v1/spaces/${_CHAT_SPACE}/messages'
+#       filter: 'status in (SUCCESS, FAILURE, TIMEOUT)'
