@@ -1,0 +1,113 @@
+# Test Framework
+pytest==7.4.0
+pytest-asyncio==0.21.0
+pytest-cov==4.1.0
+pytest-mock==3.11.1
+pytest-xdist==3.3.1
+pytest-html==3.2.0
+pytest-timeout==2.1.0
+pytest-env==1.0.1
+pytest-sugar==0.9.7
+pytest-randomly==3.13.0
+pytest-repeat==0.9.1
+pytest-rerunfailures==12.0
+pytest-lazy-fixture==0.6.3
+pytest-benchmark==4.0.0
+pytest-profiling==1.7.0
+
+# Code Quality
+black==23.7.0
+flake8==6.1.0
+mypy==1.5.1
+isort==5.12.0
+bandit==1.7.5
+safety==2.3.5
+pylint==2.17.5
+
+# Type Checking
+types-requests==2.31.0
+types-redis==4.6.0
+types-PyYAML==6.0.12
+types-python-dateutil==2.8.19
+
+# Testing Tools
+coverage==7.3.0
+tox==4.6.4
+locust==2.15.1
+hypothesis==6.82.6
+faker==19.3.0
+aioresponses==0.7.4
+responses==0.23.1
+freezegun==1.2.2
+
+# Mock & Fixtures
+factory-boy==3.3.0
+pytest-factoryboy==2.5.1
+mimesis==11.1.0
+python-jose==3.3.0
+
+# Database Testing
+pytest-postgresql==5.0.0
+pytest-redis==3.0.2
+sqlalchemy-utils==0.41.1
+
+# Security Testing
+python-owasp-zap-v2.4==0.0.20
+pyOpenSSL==23.2.0
+cryptography==41.0.3
+certifi==2023.7.22
+
+# Performance Testing
+locust==2.15.1
+prometheus-client==0.17.1
+psutil==5.9.5
+py-spy==0.3.14
+
+# Reporting & Visualization
+allure-pytest==2.13.2
+pytest-json-report==1.5.0
+pytest-reportlog==0.3.0
+pytest-metadata==3.0.0
+
+# Debugging & Profiling
+pytest-timeout==2.1.0
+pytest-clarity==1.0.1
+pytest-instafail==0.5.0
+pytest-icdiff==0.6
+pytest-picked==0.5.0
+
+# Dependency Management
+pip-tools==7.3.0
+pipdeptree==2.13.0
+pip-audit==2.6.1
+
+# Documentation Testing
+doc8==1.1.1
+sphinx==7.1.2
+pytest-sphinx==0.5.0
+
+# Container Testing
+testcontainers==3.7.1
+docker==6.1.3
+
+# CI/CD Integration
+pytest-github-actions-annotate-failures==0.2.0
+pytest-custom-exit-code==0.3.0
+pytest-custom-report==0.5.0
+
+# Monitoring & Metrics
+pytest-monitor==1.6.5
+pytest-instrumenter==0.3.0
+statsd==4.0.1
+
+# Async Testing
+pytest-asyncio==0.21.0
+async-timeout==4.0.3
+aiohttp==3.8.5
+httpx==0.24.1
+
+# Development Tools
+ipdb==0.13.13
+pytest-watch==4.2.0
+pytest-testmon==2.0.12
+pytest-xdist==3.3.1
