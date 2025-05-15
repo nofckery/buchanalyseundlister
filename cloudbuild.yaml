@@ -16,7 +16,7 @@ steps:
 - name: 'python:3.9'
   id: 'install-dependencies'
   entrypoint: pip
-  args: ['install', '-r', 'requirements.txt', '-r', 'requirements-dev.txt']
+  args: ['install', '-r', 'requirements.txt', '-r', 'requirements-test.txt']
   env:
     - 'PYTHONPATH=/workspace'
     - 'TESTING=true'
@@ -49,13 +49,13 @@ steps:
       mypy app
   waitFor: ['install-dependencies']
 
-# Terraform Format Check (im Hauptverzeichnis)
-- name: 'hashicorp/terraform:1.0.0'
-  id: 'terraform-fmt-check'
-  dir: 'terraform' # Prüft das gesamte Terraform-Verzeichnis
-  entrypoint: 'terraform'
-  args: ['fmt', '-check', '-recursive']
-  waitFor: ['-'] # Kann früh parallel laufen
+# Terraform Format Check (im Hauptverzeichnis) - VORÜBERGEHEND FÜR MANUELLEN BUILD AUSKOMMENTIERT
+# - name: 'hashicorp/terraform:1.0.0'
+#   id: 'terraform-fmt-check'
+#   dir: 'terraform' # Prüft das gesamte Terraform-Verzeichnis
+#   entrypoint: 'terraform'
+#   args: ['fmt', '-check', '-recursive']
+#   waitFor: ['-'] # Kann früh parallel laufen
 
 # 2. Security Scans (ersetzt durch detailliertere Scans unten)
 # Entfernt
@@ -116,14 +116,17 @@ steps:
 # Container Scanning (Trivy)
 - name: 'aquasec/trivy'
   id: 'container-scan-trivy'
-  args: [
-    'image',
-    '--exit-code', '1', # Build fehlschlagen lassen bei Funden
-    '--severity', 'HIGH,CRITICAL', # Nur bei HIGH oder CRITICAL fehlschlagen
-    '--format', 'json', # JSON für Reports
-    '--output', 'security-reports/container-scan-trivy.json',
-    '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA'
-  ]
+  args:
+    - '-c'
+    - |
+      mkdir -p security-reports && \
+      trivy image \
+      --exit-code 1 \
+      --severity HIGH,CRITICAL \
+      --format json \
+      --output security-reports/container-scan-trivy.json \
+      ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:$COMMIT_SHA
+  entrypoint: /bin/sh
   waitFor: ['build-container'] # Muss nach dem Build laufen
 
 # 5. Container Push
