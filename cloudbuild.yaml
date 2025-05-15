@@ -23,8 +23,10 @@ steps:
 
 - name: 'python:3.9'
   id: 'run-tests'
-  entrypoint: pytest
+  entrypoint: python
   args: [
+    '-m',
+    'pytest',
     '--junitxml=test-reports/junit.xml',
     '--cov=app',
     '--cov-report=xml:coverage-reports/coverage.xml',
