@@ -14,7 +14,7 @@ mypy==1.5.1
 # Dependency Scanning
 pip-audit==2.6.1
 # requires-safety==0.0.3 # Temporarily removed due to installation issues
-dependency-check-python==0.7.1
+# dependency-check-python==0.7.1 # Temporarily removed, package not found on PyPI
 jake==1.0.0
 ossaudit==0.5.0
 
