@@ -13,7 +13,7 @@ substitutions:
 # Build Steps
 steps:
 # 1. Tests und Linting
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'install-dependencies'
   entrypoint: pip
   args: ['install', '-r', 'requirements.txt', '-r', 'requirements-test.txt']
@@ -21,7 +21,7 @@ steps:
     - 'PYTHONPATH=/workspace'
     - 'TESTING=true'
 
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'run-tests'
   entrypoint: /bin/sh
   args:
@@ -40,7 +40,7 @@ steps:
     - 'PYTHONPATH=/workspace' # Behalten wir explizit hier
   waitFor: ['install-dependencies']
 
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'lint'
   entrypoint: bash
   args:
@@ -80,14 +80,14 @@ steps:
 
 # 4. Erweiterte Security Scans (Schnell)
 # Installiere Security Tools
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'install-security-tools'
   entrypoint: pip
   args: ['install', '-r', 'requirements-security.txt']
   waitFor: ['install-dependencies']
 
 # Statische Code Analyse (Bandit, Safety, detect-secrets)
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'static-security-analysis'
   entrypoint: bash
   args:
@@ -228,10 +228,12 @@ steps:
   waitFor: ['terraform-plan', 'check-container-analysis', 'static-security-analysis', 'dependency-check', 'container-scan-trivy'] # Abhängigkeit von terraform-validate ist implizit durch terraform-plan abgedeckt
 
 # 9. Integration Tests
-- name: 'python:3.9'
+- name: 'python:3.11'
   id: 'integration-tests'
-  entrypoint: pytest
+  entrypoint: python # Analog zu run-tests ändern
   args: [
+    '-m',
+    'pytest',
     'tests/integration',
     '--junitxml=test-reports/integration.xml'
   ]
