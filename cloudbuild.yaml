@@ -23,19 +23,21 @@ steps:
 
 - name: 'python:3.9'
   id: 'run-tests'
-  entrypoint: python
-  args: [
-    '-m',
-    'pytest',
-    '--junitxml=test-reports/junit.xml',
-    '--cov=app',
-    '--cov-report=xml:coverage-reports/coverage.xml',
-    '--cov-report=html:coverage-reports/html'
-  ]
+  entrypoint: /bin/sh
+  args:
+    - '-c'
+    - |
+      pip install -r requirements-test.txt && \
+      python -m pytest \
+        --junitxml=test-reports/junit.xml \
+        --cov=app \
+        --cov-report=xml:coverage-reports/coverage.xml \
+        --cov-report=html:coverage-reports/html
   env:
     - 'REDIS_HOST=redis-test'
     - 'REDIS_PORT=6379'
     - 'TESTING=true'
+    - 'PYTHONPATH=/workspace' # Behalten wir explizit hier
   waitFor: ['install-dependencies']
 
 - name: 'python:3.9'
