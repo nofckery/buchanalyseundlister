@@ -1,5 +1,5 @@
 # Security Testing Framework
-pytest-security==1.0.2
+# pytest-security==1.0.2 # Temporarily removed, version not found on PyPI
 pytest-cov==4.1.0
 pytest-randomly==3.13.0
 
