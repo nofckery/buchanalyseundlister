@@ -97,7 +97,7 @@ pytest-custom-report==1.0.1
 
 # Monitoring & Metrics
 pytest-monitor==1.6.5
-pytest-instrumenter==0.2.0
+# pytest-instrumenter==0.2.0 # Temporarily removed due to installation issues
 statsd==4.0.1
 
 # Async Testing
