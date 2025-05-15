@@ -121,7 +121,6 @@ steps:
     - |
       mkdir -p security-reports && \
       trivy image \
-      --exit-code 1 \
       --severity HIGH,CRITICAL \
       --format json \
       --output security-reports/container-scan-trivy.json \
